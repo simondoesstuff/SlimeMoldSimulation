@@ -166,8 +166,8 @@ void Diffuse (uint3 id : SV_DispatchThreadID)
 	float diffuseWeight = saturate(diffuseRate * deltaTime);
 	blurredCol = originalCol * (1 - diffuseWeight) + blurredCol * (diffuseWeight);
 
-	//DiffusedTrailMap[id.xy] = blurredCol * saturate(1 - decayRate * deltaTime);
-	DiffusedTrailMap[id.xy] = max(0, blurredCol - decayRate * deltaTime);
+	DiffusedTrailMap[id.xy] = blurredCol * saturate(1 - decayRate * deltaTime); // more glowy
+	//DiffusedTrailMap[id.xy] = max(0, blurredCol - decayRate * deltaTime);
 }
 
 #pragma kernel UpdateColourMap
