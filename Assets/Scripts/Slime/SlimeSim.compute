@@ -172,7 +172,8 @@ void Update(uint3 id : SV_DispatchThreadID)
     {
         int2 coord = int2(newPos);
         float4 oldTrail = TrailMap[coord];
-        float4 newTrailDelta = agent.speciesMask * trailWeight;
+        float bravery = max(0.9 * saturation, 0) + 0.1;
+        float4 newTrailDelta = agent.speciesMask * trailWeight * bravery;
         TrailMap[coord] = min(1, oldTrail + newTrailDelta * deltaTime);
     }
 
