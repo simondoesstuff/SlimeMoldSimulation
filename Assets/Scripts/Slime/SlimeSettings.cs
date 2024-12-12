@@ -26,6 +26,7 @@ public class SlimeSettings : ScriptableObject
 		public float moveSpeed;
 		public float turnSpeed;
 		public float hungerRate;
+		public float eatRate;
 
 		[Header("Sensor Settings")]
 		public float sensorAngleSpacing;

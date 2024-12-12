@@ -1,22 +1,25 @@
 ﻿#pragma kernel Update
 
-struct Agent {
-	float2 position;
-	float angle;
-	float saturation;
-	int4 speciesMask;
-	int speciesIndex;
+struct Agent
+{
+    float2 position;
+    float angle;
+    float saturation;
+    int4 speciesMask;
+    int speciesIndex;
 };
 
-struct SpeciesSettings {
-	float moveSpeed;
-	float turnSpeed;
-	float hungerRate;
+struct SpeciesSettings
+{
+    float moveSpeed;
+    float turnSpeed;
+    float hungerRate;
+    float eatRate;
 
-	float sensorAngleDegrees;
-	float sensorOffsetDst;
-	int sensorSize;
-	float4 colour;
+    float sensorAngleDegrees;
+    float sensorOffsetDst;
+    int sensorSize;
+    float4 colour;
 };
 
 StructuredBuffer<SpeciesSettings> speciesSettings;
@@ -52,10 +55,10 @@ uint hash(uint state)
 
 float foodAt(float2 xy)
 {
-	float2 scaled = xy / (float2)(width, height) * (float2)(foodWidth, foodHeight);
-	int2 rounded = int2(round(scaled));
-	int idx = rounded.x + rounded.y * foodWidth;
-	return 1 - FoodMap[idx];
+    int x2 = int(round(xy.x / width * foodWidth));
+    int y2 = int(round(xy.y / height * foodHeight));
+    int idx = x2 + y2 * foodWidth;
+    return 1 - FoodMap[idx];
 }
 
 float scaleToRange01(uint state)
@@ -64,114 +67,116 @@ float scaleToRange01(uint state)
 }
 
 
-float sense(Agent agent, SpeciesSettings settings, float sensorAngleOffset) {
-	float sensorAngle = agent.angle + sensorAngleOffset;
-	float2 sensorDir = float2(cos(sensorAngle), sin(sensorAngle));
+float sense(Agent agent, SpeciesSettings settings, float sensorAngleOffset)
+{
+    float sensorAngle = agent.angle + sensorAngleOffset;
+    float2 sensorDir = float2(cos(sensorAngle), sin(sensorAngle));
 
-	float2 sensorPos = agent.position + sensorDir * settings.sensorOffsetDst;
-	int sensorCentreX = (int) sensorPos.x;
-	int sensorCentreY = (int) sensorPos.y;
+    float2 sensorPos = agent.position + sensorDir * settings.sensorOffsetDst;
+    int sensorCentreX = (int)sensorPos.x;
+    int sensorCentreY = (int)sensorPos.y;
 
-	float sum = 0;
+    float sum = 0;
 
-	int4 senseWeight = agent.speciesMask * 2 - 1;
+    int4 senseWeight = agent.speciesMask * 2 - 1;
 
-	for (int offsetX = -settings.sensorSize; offsetX <= settings.sensorSize; offsetX ++) {
-		for (int offsetY = -settings.sensorSize; offsetY <= settings.sensorSize; offsetY ++) {
-			int sampleX = min(width - 1, max(0, sensorCentreX + offsetX));
-			int sampleY = min(height - 1, max(0, sensorCentreY + offsetY));
-			sum += dot(senseWeight, TrailMap[int2(sampleX,sampleY)]);
-		}
-	}
+    for (int offsetX = -settings.sensorSize; offsetX <= settings.sensorSize; offsetX++)
+    {
+        for (int offsetY = -settings.sensorSize; offsetY <= settings.sensorSize; offsetY++)
+        {
+            int sampleX = min(width - 1, max(0, sensorCentreX + offsetX));
+            int sampleY = min(height - 1, max(0, sensorCentreY + offsetY));
+            sum += dot(senseWeight, TrailMap[int2(sampleX, sampleY)]);
+        }
+    }
 
-	return sum;
+    return sum;
 }
 
 [numthreads(16,1,1)]
-void Update (uint3 id : SV_DispatchThreadID)
+void Update(uint3 id : SV_DispatchThreadID)
 {
-	if (id.x >= numAgents) {
-		return;
-	}
+    if (id.x >= numAgents)
+    {
+        return;
+    }
 
-	Agent agent = agents[id.x];
-	SpeciesSettings settings = speciesSettings[agent.speciesIndex];
-	float2 pos = agent.position;
+    Agent agent = agents[id.x];
+    SpeciesSettings settings = speciesSettings[agent.speciesIndex];
+    float2 pos = agent.position;
 
-	// Starving agents "die" (reset to center)
-	// if (saturation == -1)
-	// {
-	// 	agents[id.x].saturation = 0.5;
-	// 	agents[id.x].position = float2(width, height) / 2.0;
-	// 	return;
-	// }
+    uint random = hash(pos.y * width + pos.x + hash(id.x + time * 100000));
 
-	uint random = hash(pos.y * width + pos.x + hash(id.x + time * 100000));
+    // Steer based on sensory data
+    float sensorAngleRad = settings.sensorAngleDegrees * (3.1415 / 180);
+    float weightForward = sense(agent, settings, 0);
+    float weightLeft = sense(agent, settings, sensorAngleRad);
+    float weightRight = sense(agent, settings, -sensorAngleRad);
 
-	// Steer based on sensory data
-	float sensorAngleRad = settings.sensorAngleDegrees * (3.1415 / 180);
-	float weightForward = sense(agent, settings, 0);
-	float weightLeft = sense(agent, settings, sensorAngleRad);
-	float weightRight = sense(agent, settings, -sensorAngleRad);
+    // Update saturation
+    float foodLevel = foodAt(pos);
+    float deltaSaturation = (foodLevel * settings.eatRate - (1 - foodLevel) * settings.hungerRate) * deltaTime;
+    float saturation = clamp(agents[id.x].saturation + deltaSaturation, -1, 1);
+    agents[id.x].saturation = saturation;
 
-	// Update saturation
-	float foodLevel = foodAt(pos) - 0.5 + weightForward * 0.5; // following trails feeds the agent
-	float deltaSaturation = foodLevel * deltaTime * settings.hungerRate;
-	agents[id.x].saturation = clamp(agent.saturation + deltaSaturation, -1, 1);
-	float saturation = agents[id.x].saturation;
-	
-	float randomSteerStrength = scaleToRange01(random);
-	float turnSpeed = settings.turnSpeed * 2 * 3.1415;
-	float confidence = abs(agent.saturation - 0.5);
-	float deltaAngle = 0;
+    // Starving agents "die" (reset to center)
+    if (saturation < -0.9)
+    {
+        agents[id.x].saturation = 0.5;
+        agents[id.x].position = float2(width, height) / 2.0;
+        return;
+    }
 
-	// Contradiction implies low confidence
-	if (weightForward < weightLeft && weightForward < weightRight)
-	{
-		confidence = 0;
-	}
+    float randomSteerStrength = scaleToRange01(random);
+    float turnSpeed = settings.turnSpeed * 2 * 3.1415;
+    // float confidence = abs(agent.saturation - 0.5);
+    float deltaAngle = 0;
 
-	if (confidence < .3)
-	{
-		deltaAngle = (randomSteerStrength - 0.5) * turnSpeed * deltaTime;
-	}
-	else
-	{
-		// Turn right
-		if (weightRight > weightLeft)
-		{
-			deltaAngle = randomSteerStrength * turnSpeed * deltaTime * -saturation;
-		}
-		// Turn left
-		if (weightLeft > weightRight)
-		{
-			deltaAngle = randomSteerStrength * turnSpeed * deltaTime * -saturation;
-		}
-	}
+    // Continue in same direction
+    if (weightForward > weightLeft && weightForward > weightRight) {
+        agents[id.x].angle += 0;
+    }
+    // Turn randomly
+    else if (weightForward < weightLeft && weightForward < weightRight)
+    {
+        deltaAngle = (randomSteerStrength - 0.5) * 2 * turnSpeed * deltaTime;
+    }
+    // Turn right
+    else if (weightRight > weightLeft)
+    {
+        deltaAngle = randomSteerStrength * turnSpeed * deltaTime * -saturation;
+    }
+    // Turn left
+    else if (weightLeft > weightRight)
+    {
+        deltaAngle = randomSteerStrength * turnSpeed * deltaTime * -saturation;
+    }
 
-	agents[id.x].angle += deltaAngle;
+    agents[id.x].angle += deltaAngle;
 
-	// Update position
-	float2 direction = float2(cos(agent.angle), sin(agent.angle));
-	float2 newPos = agent.position + direction * deltaTime * settings.moveSpeed;
-	
-	// Clamp position to map boundaries, and pick new random move dir if hit boundary
-	if (newPos.x < 0 || newPos.x >= width || newPos.y < 0 || newPos.y >= height) {
-		random = hash(random);
-		float randomAngle = scaleToRange01(random) * 2 * 3.1415;
+    // Update position
+    float2 direction = float2(cos(agent.angle), sin(agent.angle));
+    float2 newPos = agent.position + direction * deltaTime * settings.moveSpeed;
 
-		newPos.x = min(width-1,max(0, newPos.x));
-		newPos.y = min(height-1,max(0, newPos.y));
-		agents[id.x].angle = randomAngle;
-	}
-	else {
-		int2 coord = int2(newPos);
-		float4 oldTrail = TrailMap[coord];
-		float bravery = max(saturation, 0);
-		TrailMap[coord] = min(1, oldTrail + agent.speciesMask * trailWeight * deltaTime * bravery);
-	}
-	
-	agents[id.x].position = newPos;
+    // Clamp position to map boundaries, and pick new random move dir if hit boundary
+    if (newPos.x < 0 || newPos.x >= width || newPos.y < 0 || newPos.y >= height)
+    {
+        random = hash(random);
+        float randomAngle = scaleToRange01(random) * 2 * 3.1415;
+
+        newPos.x = min(width - 1, max(0, newPos.x));
+        newPos.y = min(height - 1, max(0, newPos.y));
+        agents[id.x].angle = randomAngle;
+    }
+    else
+    {
+        int2 coord = int2(newPos);
+        float4 oldTrail = TrailMap[coord];
+        float4 newTrailDelta = agent.speciesMask * trailWeight;
+        TrailMap[coord] = min(1, oldTrail + newTrailDelta * deltaTime);
+    }
+
+    agents[id.x].position = newPos;
 }
 
 #pragma kernel Diffuse
@@ -181,47 +186,53 @@ float diffuseRate;
 RWTexture2D<float4> DiffusedTrailMap;
 
 [numthreads(8,8,1)]
-void Diffuse (uint3 id : SV_DispatchThreadID)
+void Diffuse(uint3 id : SV_DispatchThreadID)
 {
-	if (id.x < 0 || id.x >= (uint)width || id.y < 0 || id.y >= (uint)height) {
-		return;
-	}
+    if (id.x < 0 || id.x >= (uint)width || id.y < 0 || id.y >= (uint)height)
+    {
+        return;
+    }
 
-	float4 sum = 0;
-	float4 originalCol = TrailMap[id.xy];
-	// 3x3 blur
-	for (int offsetX = -1; offsetX <= 1; offsetX ++) {
-		for (int offsetY = -1; offsetY <= 1; offsetY ++) {
-			int sampleX = min(width-1, max(0, id.x + offsetX));
-			int sampleY = min(height-1, max(0, id.y + offsetY));
-			sum += TrailMap[int2(sampleX,sampleY)];
-		}
-	}
+    float4 sum = 0;
+    float4 originalCol = TrailMap[id.xy];
+    // 3x3 blur
+    for (int offsetX = -1; offsetX <= 1; offsetX++)
+    {
+        for (int offsetY = -1; offsetY <= 1; offsetY++)
+        {
+            int sampleX = min(width - 1, max(0, id.x + offsetX));
+            int sampleY = min(height - 1, max(0, id.y + offsetY));
+            sum += TrailMap[int2(sampleX, sampleY)];
+        }
+    }
 
-	float4 blurredCol = sum / 9;
-	float diffuseWeight = saturate(diffuseRate * deltaTime);
-	blurredCol = originalCol * (1 - diffuseWeight) + blurredCol * (diffuseWeight);
+    float4 blurredCol = sum / 9;
+    float diffuseWeight = saturate(diffuseRate * deltaTime);
+    blurredCol = originalCol * (1 - diffuseWeight) + blurredCol * (diffuseWeight);
 
-	DiffusedTrailMap[id.xy] = blurredCol * saturate(1 - decayRate * deltaTime); // more glowy
-	//DiffusedTrailMap[id.xy] = max(0, blurredCol - decayRate * deltaTime);
+    DiffusedTrailMap[id.xy] = blurredCol * saturate(1 - decayRate * deltaTime); // more glowy
+    //DiffusedTrailMap[id.xy] = max(0, blurredCol - decayRate * deltaTime);
 }
 
 #pragma kernel UpdateColourMap
 RWTexture2D<float4> ColourMap;
+
 [numthreads(8,8,1)]
-void UpdateColourMap (uint3 id : SV_DispatchThreadID)
+void UpdateColourMap(uint3 id : SV_DispatchThreadID)
 {
-	if (id.x < 0 || id.x >= (uint)width || id.y < 0 || id.y >= (uint)height) {
-		return;
-	}
+    if (id.x < 0 || id.x >= (uint)width || id.y < 0 || id.y >= (uint)height)
+    {
+        return;
+    }
 
-	float4 map = TrailMap[id.xy];
+    float4 map = TrailMap[id.xy];
 
-	float4 colour = 0;
-	for (uint i = 0; i < numSpecies; i ++) {
-		float4 mask = float4(i==0, i==1, i==2,i==3);
-		colour += speciesSettings[i].colour * dot(map, mask); 
-	}
-	
-	ColourMap[id.xy] = colour;
+    float4 colour = 0;
+    for (uint i = 0; i < numSpecies; i++)
+    {
+        float4 mask = float4(i == 0, i == 1, i == 2, i == 3);
+        colour += speciesSettings[i].colour * dot(map, mask);
+    }
+
+    ColourMap[id.xy] = colour;
 }

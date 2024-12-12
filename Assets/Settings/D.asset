@@ -15,16 +15,17 @@ MonoBehaviour:
   stepsPerFrame: 1
   width: 960
   height: 540
-  numAgents: 5000
+  numAgents: 10000
   spawnMode: 1
-  trailWeight: 73
-  decayRate: 0.3
-  diffuseRate: 2
+  trailWeight: 100
+  decayRate: 0.83
+  diffuseRate: 10.67
   speciesSettings:
-  - moveSpeed: 22.8
-    turnSpeed: 5.44
-    hungerRate: 4.35
-    sensorAngleSpacing: 25
-    sensorOffsetDst: 20
-    sensorSize: 2
+  - moveSpeed: 39.05
+    turnSpeed: 8
+    hungerRate: 0.16
+    eatRate: 4
+    sensorAngleSpacing: 30
+    sensorOffsetDst: 10
+    sensorSize: 3
     colour: {r: 0, g: 0.6765175, b: 1, a: 1}
