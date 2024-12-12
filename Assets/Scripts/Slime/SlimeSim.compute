@@ -15,6 +15,7 @@ struct SpeciesSettings
     float turnSpeed;
     float hungerRate;
     float eatRate;
+    float generosity;
 
     float sensorAngleDegrees;
     float sensorOffsetDst;
@@ -51,6 +52,11 @@ uint hash(uint state)
     state ^= state >> 16;
     state *= 2654435769u;
     return state;
+}
+
+float clamp01(float x)
+{
+    return clamp(x, 0, 1);
 }
 
 float foodAt(float2 xy)
@@ -114,7 +120,7 @@ void Update(uint3 id : SV_DispatchThreadID)
     float weightRight = sense(agent, settings, -sensorAngleRad);
 
     // Update saturation
-    float foodLevel = foodAt(pos);
+    float foodLevel = clamp01(foodAt(pos) + settings.generosity * weightForward / trailWeight);
     float deltaSaturation = (foodLevel * settings.eatRate - (1 - foodLevel) * settings.hungerRate) * deltaTime;
     float saturation = clamp(agents[id.x].saturation + deltaSaturation, -1, 1);
     agents[id.x].saturation = saturation;
@@ -122,7 +128,7 @@ void Update(uint3 id : SV_DispatchThreadID)
     // Starving agents "die" (reset to center)
     if (saturation < -0.9)
     {
-        agents[id.x].saturation = 0.5;
+        agents[id.x].saturation = 0.2;
         agents[id.x].position = float2(width, height) / 2.0;
         return;
     }
@@ -172,7 +178,7 @@ void Update(uint3 id : SV_DispatchThreadID)
     {
         int2 coord = int2(newPos);
         float4 oldTrail = TrailMap[coord];
-        float bravery = max(0.9 * saturation, 0) + 0.1;
+        float bravery = max(0.9 * saturation, 0);
         float4 newTrailDelta = agent.speciesMask * trailWeight * bravery;
         TrailMap[coord] = min(1, oldTrail + newTrailDelta * deltaTime);
     }

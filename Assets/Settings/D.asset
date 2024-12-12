@@ -23,8 +23,9 @@ MonoBehaviour:
   speciesSettings:
   - moveSpeed: 39.05
     turnSpeed: 8
-    hungerRate: 0.16
-    eatRate: 4
+    hungerRate: 1.23
+    eatRate: 5.81
+    generosity: 0.18
     sensorAngleSpacing: 30
     sensorOffsetDst: 10
     sensorSize: 3

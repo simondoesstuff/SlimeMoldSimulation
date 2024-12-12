@@ -245,7 +245,7 @@ MonoBehaviour:
   isoClamp: 0.1
   mapMaterial: {fileID: 2100000, guid: cbd00cba8c684fcf973224a6826a2c4d, type: 2}
   smooth: 1
-  border: 1
+  border: 0
   noiseScale: 3.23
   numLayers: 5
   lacunarity: 1.58
