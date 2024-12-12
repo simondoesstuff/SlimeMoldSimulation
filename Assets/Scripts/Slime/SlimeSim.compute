@@ -3,6 +3,7 @@
 struct Agent {
 	float2 position;
 	float angle;
+	float saturation;
 	int4 speciesMask;
 	int speciesIndex;
 };
@@ -10,6 +11,7 @@ struct Agent {
 struct SpeciesSettings {
 	float moveSpeed;
 	float turnSpeed;
+	float hungerRate;
 
 	float sensorAngleDegrees;
 	float sensorOffsetDst;
@@ -53,7 +55,7 @@ float foodAt(float2 xy)
 	float2 scaled = xy / (float2)(width, height) * (float2)(foodWidth, foodHeight);
 	int2 rounded = int2(round(scaled));
 	int idx = rounded.x + rounded.y * foodWidth;
-	return FoodMap[idx];
+	return 1 - FoodMap[idx];
 }
 
 float scaleToRange01(uint state)
@@ -92,11 +94,17 @@ void Update (uint3 id : SV_DispatchThreadID)
 		return;
 	}
 
-
 	Agent agent = agents[id.x];
 	SpeciesSettings settings = speciesSettings[agent.speciesIndex];
 	float2 pos = agent.position;
-	float foodLevel = foodAt(pos);
+
+	// Starving agents "die" (reset to center)
+	// if (saturation == -1)
+	// {
+	// 	agents[id.x].saturation = 0.5;
+	// 	agents[id.x].position = float2(width, height) / 2.0;
+	// 	return;
+	// }
 
 	uint random = hash(pos.y * width + pos.x + hash(id.x + time * 100000));
 
@@ -106,29 +114,46 @@ void Update (uint3 id : SV_DispatchThreadID)
 	float weightLeft = sense(agent, settings, sensorAngleRad);
 	float weightRight = sense(agent, settings, -sensorAngleRad);
 
+	// Update saturation
+	float foodLevel = foodAt(pos) - 0.5 + weightForward * 0.5; // following trails feeds the agent
+	float deltaSaturation = foodLevel * deltaTime * settings.hungerRate;
+	agents[id.x].saturation = clamp(agent.saturation + deltaSaturation, -1, 1);
+	float saturation = agents[id.x].saturation;
 	
 	float randomSteerStrength = scaleToRange01(random);
 	float turnSpeed = settings.turnSpeed * 2 * 3.1415;
+	float confidence = abs(agent.saturation - 0.5);
+	float deltaAngle = 0;
 
-	// Continue in same direction
-	if (weightForward > weightLeft && weightForward > weightRight) {
-		agents[id.x].angle += 0;
+	// Contradiction implies low confidence
+	if (weightForward < weightLeft && weightForward < weightRight)
+	{
+		confidence = 0;
 	}
-	else if (weightForward < weightLeft && weightForward < weightRight) {
-		agents[id.x].angle += (randomSteerStrength - 0.5) * 2 * turnSpeed * deltaTime;
+
+	if (confidence < .3)
+	{
+		deltaAngle = (randomSteerStrength - 0.5) * turnSpeed * deltaTime;
 	}
-	// Turn right
-	else if (weightRight > weightLeft) {
-		agents[id.x].angle -= randomSteerStrength * turnSpeed * deltaTime;
+	else
+	{
+		// Turn right
+		if (weightRight > weightLeft)
+		{
+			deltaAngle = randomSteerStrength * turnSpeed * deltaTime * -saturation;
+		}
+		// Turn left
+		if (weightLeft > weightRight)
+		{
+			deltaAngle = randomSteerStrength * turnSpeed * deltaTime * -saturation;
+		}
 	}
-	// Turn left
-	else if (weightLeft > weightRight) {
-		agents[id.x].angle += randomSteerStrength * turnSpeed * deltaTime;
-	}
+
+	agents[id.x].angle += deltaAngle;
 
 	// Update position
 	float2 direction = float2(cos(agent.angle), sin(agent.angle));
-	float2 newPos = agent.position + direction * deltaTime * settings.moveSpeed * foodLevel;
+	float2 newPos = agent.position + direction * deltaTime * settings.moveSpeed;
 	
 	// Clamp position to map boundaries, and pick new random move dir if hit boundary
 	if (newPos.x < 0 || newPos.x >= width || newPos.y < 0 || newPos.y >= height) {
@@ -142,7 +167,8 @@ void Update (uint3 id : SV_DispatchThreadID)
 	else {
 		int2 coord = int2(newPos);
 		float4 oldTrail = TrailMap[coord];
-		TrailMap[coord] = min(1, oldTrail + agent.speciesMask * trailWeight * deltaTime);
+		float bravery = max(saturation, 0);
+		TrailMap[coord] = min(1, oldTrail + agent.speciesMask * trailWeight * deltaTime * bravery);
 	}
 	
 	agents[id.x].position = newPos;

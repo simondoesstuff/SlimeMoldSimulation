@@ -255,8 +255,8 @@ MonoBehaviour:
   autoRefreshNoise: 0
   useBrush: 1
   brushWorldRadius: 0.75
-  brushMinMax: {x: 0.5, y: 1}
-  brushStrength: 5
+  brushMinMax: {x: 0.1, y: 2}
+  brushStrength: 7
   brush: {fileID: 271683207}
   brushRadiusInputSensitivity: 0.8
   loadFile: {fileID: 4900000, guid: 002b9d637e4424eb394ae98517920808, type: 3}
@@ -379,7 +379,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1531495863}
   - component: {fileID: 1531495862}
-  - component: {fileID: 1531495864}
   m_Layer: 0
   m_Name: Simulation
   m_TagString: Untagged
@@ -425,28 +424,6 @@ Transform:
   - {fileID: 1534864513}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1531495864
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1531495861}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0173053465a956443813261665491110, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  compute: {fileID: 7200000, guid: a0aea66b8c503e748bb334583d5db67c, type: 3}
-  drawAgentsCS: {fileID: 7200000, guid: 9d6969cce8474ed4899115f5d816b0a5, type: 3}
-  settings: {fileID: 11400000, guid: 87cfdbad3f2699649b250f4531fd4d7e, type: 2}
-  mapGen: {fileID: 441801965}
-  showAgentsOnly: 0
-  filterMode: 1
-  format: 48
-  trailMap: {fileID: 0}
-  diffusedTrailMap: {fileID: 0}
-  displayTexture: {fileID: 0}
 --- !u!1 &1534864509
 GameObject:
   m_ObjectHideFlags: 0

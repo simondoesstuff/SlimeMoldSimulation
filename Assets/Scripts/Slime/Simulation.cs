@@ -41,7 +41,6 @@ public class Simulation : MonoBehaviour
 		transform.GetComponentInChildren<MeshRenderer>().material.mainTexture = displayTexture;
 	}
 
-
 	void Init()
 	{
 		// Create render textures
@@ -183,6 +182,7 @@ public class Simulation : MonoBehaviour
 	{
 		public Vector2 position;
 		public float angle;
+		public float saturation;
 		public Vector3Int speciesMask;
 		int unusedSpeciesChannel;
 		public int speciesIndex;
