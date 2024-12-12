@@ -14,6 +14,9 @@ public class Simulation : MonoBehaviour
 	public ComputeShader drawAgentsCS;
 
 	public SlimeSettings settings;
+	public MapGenerator mapGen;
+	private int foodHeight;
+	private int foodWidth;
 
 	[Header("Display Settings")]
 	public bool showAgentsOnly;
@@ -22,15 +25,18 @@ public class Simulation : MonoBehaviour
 
 
 	[SerializeField, HideInInspector] protected RenderTexture trailMap;
+	[SerializeField, HideInInspector] protected ComputeBuffer foodMap;
 	[SerializeField, HideInInspector] protected RenderTexture diffusedTrailMap;
 	[SerializeField, HideInInspector] protected RenderTexture displayTexture;
 
 	ComputeBuffer agentBuffer;
 	ComputeBuffer settingsBuffer;
 	Texture2D colourMapTexture;
-
+	
 	protected virtual void Start()
 	{
+		foodWidth = mapGen.fullMap.GetLength(0);
+		foodHeight = mapGen.fullMap.GetLength(1);
 		Init();
 		transform.GetComponentInChildren<MeshRenderer>().material.mainTexture = displayTexture;
 	}
@@ -39,6 +45,7 @@ public class Simulation : MonoBehaviour
 	void Init()
 	{
 		// Create render textures
+		ComputeHelper.CreateStructuredBuffer<float>(ref foodMap, settings.width * settings.height);
 		ComputeHelper.CreateRenderTexture(ref trailMap, settings.width, settings.height, filterMode, format);
 		ComputeHelper.CreateRenderTexture(ref diffusedTrailMap, settings.width, settings.height, filterMode, format);
 		ComputeHelper.CreateRenderTexture(ref displayTexture, settings.width, settings.height, filterMode, format);
@@ -49,6 +56,10 @@ public class Simulation : MonoBehaviour
 		compute.SetTexture(diffuseMapKernel, "DiffusedTrailMap", diffusedTrailMap);
 		compute.SetTexture(colourKernel, "ColourMap", displayTexture);
 		compute.SetTexture(colourKernel, "TrailMap", trailMap);
+		
+		// Default Food Grid
+		foodMap.SetData(new float[foodHeight * foodWidth]);
+		compute.SetBuffer(updateKernel, "FoodMap", foodMap);
 
 		// Create agents with initial positions and angles
 		Agent[] agents = new Agent[settings.numAgents];
@@ -103,11 +114,11 @@ public class Simulation : MonoBehaviour
 		drawAgentsCS.SetBuffer(0, "agents", agentBuffer);
 		drawAgentsCS.SetInt("numAgents", settings.numAgents);
 
-
 		compute.SetInt("width", settings.width);
 		compute.SetInt("height", settings.height);
-
-
+		
+		compute.SetInt("foodWidth", foodWidth);
+		compute.SetInt("foodHeight", foodHeight);
 	}
 
 	void FixedUpdate()
@@ -156,6 +167,10 @@ public class Simulation : MonoBehaviour
 		ComputeHelper.Dispatch(compute, settings.width, settings.height, 1, kernelIndex: diffuseMapKernel);
 
 		ComputeHelper.CopyRenderTexture(diffusedTrailMap, trailMap);
+
+		var foodDataFlat = mapGen.bakeValues();
+		foodMap.SetData(foodDataFlat);
+		compute.SetBuffer(updateKernel, "FoodMap", foodMap);
 	}
 
 	void OnDestroy()

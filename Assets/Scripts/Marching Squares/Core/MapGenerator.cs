@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
@@ -39,8 +40,8 @@ public class MapGenerator : MonoBehaviour {
 	float targetBrushRadius;
 	public TextAsset loadFile;
 	public bool loadOnStart;
-
-	float[, ] fullMap;
+	
+	public float[, ] fullMap;
 	Chunk[, ] chunks;
 
 	Vector2 brushPosLastFrame;
@@ -284,6 +285,24 @@ public class MapGenerator : MonoBehaviour {
 				chunks[x, y].UpdateMesh ();
 			}
 		}
+	}
+
+	public float[] bakeValues()
+	{
+		var width = fullMap.GetLength (0);
+		var height = fullMap.GetLength (1);
+
+		var flat = new float[width * height];
+		
+		for (int y = 0; y < height; y++)
+		for (int x = 0; x < width; x++)
+		{
+			var v = fullMap[x, y];
+			v = Mathf.InverseLerp(iso - isoClamp, iso + isoClamp, v);
+			flat[x + y * fullMap.GetLength(0)] = v;
+		}
+
+		return flat;
 	}
 
 	public class Chunk {

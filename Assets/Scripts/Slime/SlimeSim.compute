@@ -27,6 +27,9 @@ uint numAgents;
 RWTexture2D<float4> TrailMap;
 int width;
 int height;
+StructuredBuffer<float> FoodMap;
+int foodWidth;
+int foodHeight;
 
 float trailWeight;
 
@@ -43,6 +46,14 @@ uint hash(uint state)
     state ^= state >> 16;
     state *= 2654435769u;
     return state;
+}
+
+float foodAt(float2 xy)
+{
+	float2 scaled = xy / (float2)(width, height) * (float2)(foodWidth, foodHeight);
+	int2 rounded = int2(round(scaled));
+	int idx = rounded.x + rounded.y * foodWidth;
+	return FoodMap[idx];
 }
 
 float scaleToRange01(uint state)
@@ -85,6 +96,7 @@ void Update (uint3 id : SV_DispatchThreadID)
 	Agent agent = agents[id.x];
 	SpeciesSettings settings = speciesSettings[agent.speciesIndex];
 	float2 pos = agent.position;
+	float foodLevel = foodAt(pos);
 
 	uint random = hash(pos.y * width + pos.x + hash(id.x + time * 100000));
 
@@ -114,11 +126,9 @@ void Update (uint3 id : SV_DispatchThreadID)
 		agents[id.x].angle += randomSteerStrength * turnSpeed * deltaTime;
 	}
 
-
 	// Update position
 	float2 direction = float2(cos(agent.angle), sin(agent.angle));
-	float2 newPos = agent.position + direction * deltaTime * settings.moveSpeed;
-
+	float2 newPos = agent.position + direction * deltaTime * settings.moveSpeed * foodLevel;
 	
 	// Clamp position to map boundaries, and pick new random move dir if hit boundary
 	if (newPos.x < 0 || newPos.x >= width || newPos.y < 0 || newPos.y >= height) {
@@ -186,6 +196,6 @@ void UpdateColourMap (uint3 id : SV_DispatchThreadID)
 		float4 mask = float4(i==0, i==1, i==2,i==3);
 		colour += speciesSettings[i].colour * dot(map, mask); 
 	}
+	
 	ColourMap[id.xy] = colour;
-
 }
